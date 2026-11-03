@@ -1,0 +1,13 @@
+// PS21: Urban Air Quality (MongoDB - mongosh)
+use CleanAirDB
+db.Stations.insertOne({stationId:1, name:"Central", city:"Pune"})
+db.Stations.insertOne({stationId:2, name:"North", city:"Pune"})
+db.AirReadings.insertOne({stationId:1, date:new Date("2026-10-01"), pm25:45, pm10:80, temperature:28, status:"Moderate"})
+db.AirReadings.insertOne({stationId:1, date:new Date("2026-10-02"), pm25:65, pm10:110, temperature:30, status:"Poor"})
+db.AirReadings.insertOne({stationId:2, date:new Date("2026-10-01"), pm25:25, pm10:50, temperature:27, status:"Good"})
+db.AirReadings.find()
+db.AirReadings.find({stationId:1})
+db.AirReadings.updateOne({stationId:2}, {$set:{status:"Satisfactory"}})
+db.AirReadings.deleteOne({stationId:2})
+db.AirReadings.createIndex({stationId:1})
+db.AirReadings.aggregate([{$group:{_id:"$stationId", avgPM25:{$avg:"$pm25"}}}])

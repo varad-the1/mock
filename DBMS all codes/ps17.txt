@@ -1,0 +1,47 @@
+-- PS17: Biomedical Patient Diagnosis and Treatment (MySQL)
+-- Entities: Patient(1)--(M)Test_Result(M)--(1)Diagnostic_Test ; Doctor(1)--(M)Treatment(M)--(1)Patient
+-- FDs: PatientID->Name,DOB,Phone ; DoctorID->DocName,Speciality ; TestID->TestName,Category ;
+--      ResultID->PatientID,TestID,TestDate,Result ; TreatID->PatientID,DoctorID,Diagnosis,StartDate
+-- Normalization: 1NF atomic values; 2NF no partial dependency (single-attribute keys);
+--   3NF/BCNF every determinant is a candidate key (test/doctor details kept in own tables).
+CREATE DATABASE IF NOT EXISTS hospital; USE hospital;
+CREATE TABLE Patient(PatientID INT PRIMARY KEY, Name VARCHAR(50) NOT NULL, DOB DATE, Phone VARCHAR(15) UNIQUE);
+CREATE TABLE Doctor(DoctorID INT PRIMARY KEY, DocName VARCHAR(50) NOT NULL, Speciality VARCHAR(30));
+CREATE TABLE Diagnostic_Test(TestID INT PRIMARY KEY, TestName VARCHAR(40) NOT NULL UNIQUE, Category VARCHAR(20) NOT NULL);
+CREATE TABLE Test_Result(ResultID INT PRIMARY KEY, PatientID INT NOT NULL, TestID INT NOT NULL, TestDate DATE NOT NULL, Result VARCHAR(50),
+  FOREIGN KEY(PatientID) REFERENCES Patient(PatientID), FOREIGN KEY(TestID) REFERENCES Diagnostic_Test(TestID));
+CREATE TABLE Treatment(TreatID INT PRIMARY KEY, PatientID INT NOT NULL, DoctorID INT NOT NULL, Diagnosis VARCHAR(50), StartDate DATE,
+  Cost DECIMAL(8,2) CHECK(Cost>=0),
+  FOREIGN KEY(PatientID) REFERENCES Patient(PatientID), FOREIGN KEY(DoctorID) REFERENCES Doctor(DoctorID));
+
+CREATE INDEX idx_tr_patient ON Test_Result(PatientID);
+CREATE INDEX idx_tr_date ON Test_Result(TestDate);
+CREATE INDEX idx_t_doctor ON Treatment(DoctorID);
+
+INSERT INTO Patient VALUES(1,'Amit','1990-05-01','9000000001'),(2,'Riya','1985-03-12','9000000002'),(3,'Neha','2000-07-21','9000000003');
+INSERT INTO Doctor VALUES(1,'Dr. Rao','Cardiology'),(2,'Dr. Shah','General');
+INSERT INTO Diagnostic_Test VALUES(1,'Blood Test','Pathology'),(2,'X-Ray','Radiology'),(3,'ECG','Cardiac');
+INSERT INTO Test_Result VALUES(1,1,1,'2026-10-01','Normal'),(2,1,2,'2026-10-02','Fracture'),(3,2,1,'2026-10-03','Low Hb'),(4,3,3,'2026-10-04','Normal');
+INSERT INTO Treatment VALUES(1,1,2,'Fracture','2026-10-02',1500),(2,2,1,'Anaemia','2026-10-04',800);
+
+-- view hiding confidential data (no DOB / Phone)
+CREATE VIEW Patient_Treatment_History AS
+SELECT p.PatientID,p.Name,d.DocName,t.Diagnosis,t.StartDate FROM Treatment t
+ JOIN Patient p ON t.PatientID=p.PatientID JOIN Doctor d ON t.DoctorID=d.DoctorID;
+SELECT * FROM Patient_Treatment_History;
+
+-- joins
+SELECT p.Name,dt.TestName,r.Result,r.TestDate FROM Test_Result r
+ JOIN Patient p ON r.PatientID=p.PatientID JOIN Diagnostic_Test dt ON r.TestID=dt.TestID;
+-- subquery: patients treated by cardiologists
+SELECT Name FROM Patient WHERE PatientID IN
+ (SELECT PatientID FROM Treatment WHERE DoctorID IN (SELECT DoctorID FROM Doctor WHERE Speciality='Cardiology'));
+-- set operators (MySQL 8.0.31+ supports INTERSECT)
+-- patients with both Pathology AND Radiology tests
+SELECT r.PatientID FROM Test_Result r JOIN Diagnostic_Test t ON r.TestID=t.TestID WHERE t.Category='Pathology'
+INTERSECT
+SELECT r.PatientID FROM Test_Result r JOIN Diagnostic_Test t ON r.TestID=t.TestID WHERE t.Category='Radiology';
+-- patients with either category
+SELECT r.PatientID FROM Test_Result r JOIN Diagnostic_Test t ON r.TestID=t.TestID WHERE t.Category='Pathology'
+UNION
+SELECT r.PatientID FROM Test_Result r JOIN Diagnostic_Test t ON r.TestID=t.TestID WHERE t.Category='Radiology';

@@ -1,0 +1,45 @@
+-- PS1: Telecom Postpaid Data Usage and Bill Management (MySQL)
+CREATE DATABASE IF NOT EXISTS telecom; USE telecom;
+CREATE TABLE Plan(PlanID INT PRIMARY KEY, PlanName VARCHAR(30), Rental DECIMAL(8,2), LimitGB INT, ExtraRate DECIMAL(6,2));
+CREATE TABLE Customer(CustID INT PRIMARY KEY, Name VARCHAR(50), PlanID INT, FOREIGN KEY(PlanID) REFERENCES Plan(PlanID));
+CREATE TABLE Data_Usage(UsageID INT AUTO_INCREMENT PRIMARY KEY, CustID INT, UsedGB DECIMAL(6,2), FOREIGN KEY(CustID) REFERENCES Customer(CustID));
+INSERT INTO Plan VALUES(1,'Basic',299,10,20),(2,'Pro',599,50,15);
+INSERT INTO Customer VALUES(1,'Amit',1),(2,'Riya',2),(3,'Neha',NULL);
+INSERT INTO Data_Usage(CustID,UsedGB) VALUES(1,8),(1,7),(2,30);
+
+DELIMITER //
+CREATE PROCEDURE calc_bill(IN p_id INT)
+BEGIN
+  DECLARE v_plan INT; DECLARE v_rent, v_rate, v_bill DECIMAL(8,2);
+  DECLARE v_limit INT; DECLARE v_used DECIMAL(6,2); DECLARE v_cnt INT;
+  SELECT COUNT(*) INTO v_cnt FROM Customer WHERE CustID=p_id;
+  IF v_cnt=0 THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Invalid customer ID'; END IF;
+  SELECT PlanID INTO v_plan FROM Customer WHERE CustID=p_id;
+  IF v_plan IS NULL THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Missing plan details'; END IF;
+  SELECT Rental,LimitGB,ExtraRate INTO v_rent,v_limit,v_rate FROM Plan WHERE PlanID=v_plan;
+  SELECT IFNULL(SUM(UsedGB),0) INTO v_used FROM Data_Usage WHERE CustID=p_id;
+  IF v_used<0 THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Invalid usage value'; END IF;
+  SET v_bill=v_rent;
+  IF v_used>v_limit THEN SET v_bill=v_rent+(v_used-v_limit)*v_rate; END IF;
+  SELECT p_id AS CustID, v_used AS UsedGB, v_bill AS Bill,
+         IF(v_used>v_limit,'Excess-usage','Within-limit') AS Category;
+END//
+
+CREATE PROCEDURE classify_all()
+BEGIN
+  DECLARE i INT DEFAULT 1; DECLARE n INT;
+  SELECT MAX(CustID) INTO n FROM Customer;
+  WHILE i<=n DO
+    BEGIN
+      DECLARE EXIT HANDLER FOR SQLEXCEPTION SELECT CONCAT('Customer ',i,' skipped (error)') AS Msg;
+      CALL calc_bill(i);
+    END;
+    SET i=i+1;
+  END WHILE;
+END//
+DELIMITER ;
+
+CALL calc_bill(1);
+CALL calc_bill(2);
+CALL classify_all();
+CALL calc_bill(99);   -- invalid customer ID error

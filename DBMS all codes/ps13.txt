@@ -1,0 +1,33 @@
+-- PS13: Job Placement and Recruitment Search Optimization (MySQL)
+CREATE DATABASE IF NOT EXISTS placement; USE placement;
+CREATE TABLE Student(StudID INT PRIMARY KEY, Name VARCHAR(50), Skill VARCHAR(30), CGPA DECIMAL(3,2));
+CREATE TABLE Company(CompID INT PRIMARY KEY, CompName VARCHAR(50));
+CREATE TABLE Job(JobID INT PRIMARY KEY, CompID INT, Role VARCHAR(30), MinCGPA DECIMAL(3,2), FOREIGN KEY(CompID) REFERENCES Company(CompID));
+CREATE TABLE Job_Application(AppID INT PRIMARY KEY, StudID INT, JobID INT, Status VARCHAR(15),
+  FOREIGN KEY(StudID) REFERENCES Student(StudID), FOREIGN KEY(JobID) REFERENCES Job(JobID));
+INSERT INTO Student VALUES(1,'Amit','Java',8.5),(2,'Riya','Python',7.9),(3,'Neha','Java',6.8);
+INSERT INTO Company VALUES(1,'TCS'),(2,'Infosys');
+INSERT INTO Job VALUES(1,1,'Developer',7.5),(2,2,'Analyst',7.0);
+INSERT INTO Job_Application VALUES(1,1,1,'Applied'),(2,2,2,'Selected'),(3,3,1,'Rejected');
+
+-- BEFORE indexes
+EXPLAIN SELECT * FROM Student WHERE Skill='Java';
+EXPLAIN SELECT * FROM Job WHERE Role='Developer';
+EXPLAIN SELECT * FROM Job_Application WHERE Status='Applied';
+
+CREATE INDEX idx_skill ON Student(Skill);
+CREATE INDEX idx_role ON Job(Role);
+CREATE INDEX idx_status ON Job_Application(Status);
+
+-- AFTER indexes
+EXPLAIN SELECT * FROM Student WHERE Skill='Java';
+EXPLAIN SELECT * FROM Job WHERE Role='Developer';
+EXPLAIN SELECT * FROM Job_Application WHERE Status='Applied';
+
+-- eligible candidates for each job
+SELECT s.Name,j.Role FROM Student s JOIN Job j ON s.CGPA>=j.MinCGPA;
+-- available jobs
+SELECT j.JobID,c.CompName,j.Role FROM Job j JOIN Company c ON j.CompID=c.CompID;
+-- application details
+SELECT s.Name,c.CompName,j.Role,a.Status FROM Job_Application a
+ JOIN Student s ON a.StudID=s.StudID JOIN Job j ON a.JobID=j.JobID JOIN Company c ON j.CompID=c.CompID;

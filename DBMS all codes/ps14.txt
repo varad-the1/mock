@@ -1,0 +1,26 @@
+-- PS14: News Article Archive and Full-Text Search (MySQL)
+CREATE DATABASE IF NOT EXISTS news; USE news;
+CREATE TABLE Category(CatID INT PRIMARY KEY, CatName VARCHAR(30));
+CREATE TABLE Author(AuthorID INT PRIMARY KEY, AuthorName VARCHAR(50));
+CREATE TABLE Article(ArtID INT PRIMARY KEY, Title VARCHAR(100), Content TEXT, CatID INT, AuthorID INT, PubDate DATE,
+  FOREIGN KEY(CatID) REFERENCES Category(CatID), FOREIGN KEY(AuthorID) REFERENCES Author(AuthorID));
+INSERT INTO Category VALUES(1,'Sports'),(2,'Tech');
+INSERT INTO Author VALUES(1,'Ravi'),(2,'Sita');
+INSERT INTO Article VALUES
+(1,'India wins cricket final','India won the cricket world cup final',1,1,'2026-10-01'),
+(2,'New database released','A new open source database engine was released',2,2,'2026-10-05'),
+(3,'Tech giants invest in AI','Companies invest heavily in artificial intelligence',2,1,'2026-10-10');
+
+CREATE INDEX idx_cat ON Article(CatID);
+CREATE INDEX idx_date ON Article(PubDate);
+CREATE INDEX idx_author ON Article(AuthorID);
+CREATE FULLTEXT INDEX ft_article ON Article(Title,Content);
+
+SELECT * FROM Article WHERE CatID=2;
+SELECT * FROM Article WHERE AuthorID=1;
+SELECT * FROM Article WHERE PubDate BETWEEN '2026-10-01' AND '2026-10-07';
+SELECT * FROM Article WHERE MATCH(Title,Content) AGAINST('database');
+
+EXPLAIN SELECT * FROM Article WHERE CatID=2;
+EXPLAIN SELECT * FROM Article WHERE Content LIKE '%database%';                  -- normal search (full scan)
+EXPLAIN SELECT * FROM Article WHERE MATCH(Title,Content) AGAINST('database');   -- full-text search

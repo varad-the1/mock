@@ -1,0 +1,46 @@
+-- PS6: Gym Membership and Reward Points (MySQL)
+CREATE DATABASE IF NOT EXISTS gym; USE gym;
+CREATE TABLE Membership_Plan(PlanID INT PRIMARY KEY, PlanName VARCHAR(30), Months INT, Fee DECIMAL(8,2));
+CREATE TABLE Member(MemberID INT PRIMARY KEY, Name VARCHAR(50), PlanID INT, ValidTill DATE, FOREIGN KEY(PlanID) REFERENCES Membership_Plan(PlanID));
+CREATE TABLE Attendance(AttID INT AUTO_INCREMENT PRIMARY KEY, MemberID INT, AttDate DATE, FOREIGN KEY(MemberID) REFERENCES Member(MemberID));
+CREATE TABLE Reward_Points(MemberID INT PRIMARY KEY, Points INT DEFAULT 0);
+INSERT INTO Membership_Plan VALUES(1,'Monthly',1,1000),(2,'Quarterly',3,2700);
+INSERT INTO Member VALUES(1,'Amit',1,'2026-10-31'),(2,'Riya',2,'2027-01-15');
+INSERT INTO Attendance(MemberID,AttDate) VALUES(1,'2026-10-01'),(1,'2026-10-02'),(2,'2026-10-03');
+INSERT INTO Reward_Points VALUES(1,0),(2,0);
+
+DELIMITER //
+CREATE FUNCTION calc_points(p_mem INT) RETURNS INT DETERMINISTIC READS SQL DATA
+BEGIN
+  DECLARE d INT;
+  SELECT COUNT(*) INTO d FROM Attendance WHERE MemberID=p_mem;
+  RETURN d*10;   -- 10 points per visit
+END//
+
+CREATE PROCEDURE renew_membership(IN p_mem INT, IN p_plan INT)
+BEGIN
+  DECLARE m INT;
+  SELECT Months INTO m FROM Membership_Plan WHERE PlanID=p_plan;
+  UPDATE Member SET PlanID=p_plan,
+    ValidTill=DATE_ADD(GREATEST(ValidTill,CURDATE()),INTERVAL m MONTH) WHERE MemberID=p_mem;
+END//
+
+-- OUT: retrieve info
+CREATE PROCEDURE get_member_info(IN p_mem INT, OUT p_name VARCHAR(50), OUT p_valid DATE)
+BEGIN
+  SELECT Name,ValidTill INTO p_name,p_valid FROM Member WHERE MemberID=p_mem;
+END//
+
+-- INOUT: add bonus to points
+CREATE PROCEDURE update_points(IN p_mem INT, INOUT p_pts INT)
+BEGIN
+  SET p_pts = calc_points(p_mem) + p_pts;
+  UPDATE Reward_Points SET Points=p_pts WHERE MemberID=p_mem;
+END//
+DELIMITER ;
+
+CALL get_member_info(1,@n,@v); SELECT @n,@v;
+CALL renew_membership(1,2);
+CALL get_member_info(1,@n,@v); SELECT @n,@v;
+SET @pts=5; CALL update_points(1,@pts); SELECT @pts AS TotalPoints;
+SELECT calc_points(1) AS Points_Member1;

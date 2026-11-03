@@ -1,0 +1,41 @@
+-- PS2: Water Quality Monitoring and Classification (MySQL)
+CREATE DATABASE IF NOT EXISTS water; USE water;
+CREATE TABLE Location(LocID INT PRIMARY KEY, LocName VARCHAR(50));
+CREATE TABLE Water_Sample(SampleID INT PRIMARY KEY, LocID INT, PH DECIMAL(4,2), TDS INT, Turbidity DECIMAL(5,2), FOREIGN KEY(LocID) REFERENCES Location(LocID));
+CREATE TABLE Quality_Parameter(Param VARCHAR(10) PRIMARY KEY, MinVal DECIMAL(8,2), MaxVal DECIMAL(8,2));
+CREATE TABLE Sample_Result(SampleID INT PRIMARY KEY, Quality VARCHAR(10));
+INSERT INTO Location VALUES(1,'Lake A'),(2,'River B');
+INSERT INTO Quality_Parameter VALUES('PH',6.5,8.5),('TDS',0,500),('TURB',0,5);
+INSERT INTO Water_Sample VALUES(1,1,7.2,300,2),(2,2,5.8,700,6),(3,1,7.0,NULL,1),(4,2,15,200,1);
+
+DELIMITER //
+CREATE PROCEDURE classify_sample(IN p_id INT)
+BEGIN
+  DECLARE v_ph DECIMAL(4,2); DECLARE v_tds INT; DECLARE v_t DECIMAL(5,2); DECLARE v_q VARCHAR(10);
+  IF NOT EXISTS(SELECT 1 FROM Water_Sample WHERE SampleID=p_id) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Invalid sample ID'; END IF;
+  SELECT PH,TDS,Turbidity INTO v_ph,v_tds,v_t FROM Water_Sample WHERE SampleID=p_id;
+  IF v_ph IS NULL OR v_tds IS NULL OR v_t IS NULL THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Missing reading'; END IF;
+  IF v_ph<0 OR v_ph>14 THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Incorrect pH value'; END IF;
+  IF v_ph BETWEEN 6.5 AND 8.5 AND v_tds<=500 AND v_t<=5 THEN SET v_q='Good';
+  ELSEIF v_ph BETWEEN 6 AND 9 AND v_tds<=1000 THEN SET v_q='Average';
+  ELSE SET v_q='Poor'; END IF;
+  REPLACE INTO Sample_Result VALUES(p_id,v_q);
+END//
+
+CREATE PROCEDURE classify_all()
+BEGIN
+  DECLARE i INT DEFAULT 1; DECLARE n INT;
+  SELECT MAX(SampleID) INTO n FROM Water_Sample;
+  WHILE i<=n DO
+    BEGIN
+      DECLARE CONTINUE HANDLER FOR SQLEXCEPTION SELECT CONCAT('Sample ',i,' has invalid/missing data') AS Msg;
+      CALL classify_sample(i);
+    END;
+    SET i=i+1;
+  END WHILE;
+END//
+DELIMITER ;
+
+CALL classify_all();
+SELECT * FROM Sample_Result;

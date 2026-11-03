@@ -1,0 +1,40 @@
+-- PS18: Smart Agriculture and Crop Yield Analysis (MySQL)
+-- Entities: Farmer(1)--(M)Farm ; Farm(1)--(M)Soil_Reading ; Crop(1)--(M)Harvest(M)--(1)Farm
+-- FDs: FarmerID->FName,Phone ; FarmID->FarmerID,Location ; CropID->CropName ; ReadingID->FarmID,ReadDate,pH,Moisture ;
+--      HarvestID->FarmID,CropID,YieldKg,HarvestDate
+-- Normalization: 1NF atomic, 2NF no partial deps, 3NF/BCNF every determinant is a key.
+CREATE DATABASE IF NOT EXISTS agri; USE agri;
+CREATE TABLE Farmer(FarmerID INT PRIMARY KEY, FName VARCHAR(50) NOT NULL, Phone VARCHAR(15) UNIQUE);
+CREATE TABLE Farm(FarmID INT PRIMARY KEY, FarmerID INT NOT NULL, Location VARCHAR(40), FOREIGN KEY(FarmerID) REFERENCES Farmer(FarmerID));
+CREATE TABLE Crop(CropID INT PRIMARY KEY, CropName VARCHAR(30) NOT NULL UNIQUE);
+CREATE TABLE Soil_Reading(ReadingID INT PRIMARY KEY, FarmID INT NOT NULL, ReadDate DATE NOT NULL, pH DECIMAL(3,1) CHECK(pH BETWEEN 0 AND 14), Moisture DECIMAL(5,2),
+  FOREIGN KEY(FarmID) REFERENCES Farm(FarmID));
+CREATE TABLE Harvest(HarvestID INT PRIMARY KEY, FarmID INT NOT NULL, CropID INT NOT NULL, YieldKg DECIMAL(10,2) CHECK(YieldKg>=0), HarvestDate DATE,
+  FOREIGN KEY(FarmID) REFERENCES Farm(FarmID), FOREIGN KEY(CropID) REFERENCES Crop(CropID));
+
+CREATE INDEX idx_soil_farm ON Soil_Reading(FarmID);
+CREATE INDEX idx_harv_crop ON Harvest(CropID);
+CREATE INDEX idx_soil_date ON Soil_Reading(ReadDate);
+
+INSERT INTO Farmer VALUES(1,'Ramesh','9111111111'),(2,'Suresh','9222222222');
+INSERT INTO Farm VALUES(1,1,'Pune'),(2,2,'Nashik'),(3,1,'Satara');
+INSERT INTO Crop VALUES(1,'Wheat'),(2,'Rice');
+INSERT INTO Soil_Reading VALUES(1,1,'2026-09-01',6.8,40),(2,1,'2026-09-15',7.0,38),(3,2,'2026-09-01',6.2,45),(4,3,'2026-09-01',7.4,30);
+INSERT INTO Harvest VALUES(1,1,1,1200,'2026-10-20'),(2,2,2,1800,'2026-10-22'),(3,3,1,900,'2026-10-25'),(4,1,2,700,'2026-10-28');
+
+-- view without confidential farmer info
+CREATE VIEW Crop_Soil_View AS
+SELECT f.FarmID,f.Location,c.CropName,h.YieldKg,s.ReadDate,s.pH,s.Moisture
+FROM Farm f JOIN Harvest h ON f.FarmID=h.FarmID JOIN Crop c ON h.CropID=c.CropID
+JOIN Soil_Reading s ON s.FarmID=f.FarmID;
+SELECT * FROM Crop_Soil_View;
+
+-- average soil parameters per farm
+SELECT FarmID,AVG(pH) AS AvgpH,AVG(Moisture) AS AvgMoisture FROM Soil_Reading GROUP BY FarmID;
+-- total yield per farm
+SELECT FarmID,SUM(YieldKg) AS TotalYield FROM Harvest GROUP BY FarmID;
+-- rank farms by yield (window function)
+SELECT FarmID,SUM(YieldKg) AS TotalYield, RANK() OVER(ORDER BY SUM(YieldKg) DESC) AS YieldRank FROM Harvest GROUP BY FarmID;
+-- rank crops by average production
+SELECT c.CropName,AVG(h.YieldKg) AS AvgYield, RANK() OVER(ORDER BY AVG(h.YieldKg) DESC) AS CropRank
+FROM Harvest h JOIN Crop c ON h.CropID=c.CropID GROUP BY c.CropName;

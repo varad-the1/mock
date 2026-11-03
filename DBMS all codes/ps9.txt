@@ -1,0 +1,39 @@
+-- PS9: Manufacturing Quality Inspection (MySQL) - cursor + triggers
+CREATE DATABASE IF NOT EXISTS mfg; USE mfg;
+CREATE TABLE Production_Batch(BatchID INT PRIMARY KEY, Product VARCHAR(30), BatchDate DATE);
+CREATE TABLE Inspection_Stage(StageID INT PRIMARY KEY, BatchID INT, Status VARCHAR(10), Remarks VARCHAR(50));   -- staging
+CREATE TABLE Inspection_Master(StageID INT PRIMARY KEY, BatchID INT, Status VARCHAR(10), Remarks VARCHAR(50));
+CREATE TABLE Inspection_Audit(AuditID INT AUTO_INCREMENT PRIMARY KEY, StageID INT, Action VARCHAR(10), NewStatus VARCHAR(10), At TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE Rejected_Log(StageID INT, Reason VARCHAR(40));
+INSERT INTO Production_Batch VALUES(1,'Bolt','2026-10-01'),(2,'Nut','2026-10-02');
+INSERT INTO Inspection_Stage VALUES(1,1,'PASS','ok'),(2,1,'FAIL','crack'),(3,2,'WRONG','?'),(4,9,'PASS','no batch');
+
+DELIMITER //
+CREATE TRIGGER trg_insp_ins AFTER INSERT ON Inspection_Master FOR EACH ROW
+  INSERT INTO Inspection_Audit(StageID,Action,NewStatus) VALUES(NEW.StageID,'INSERT',NEW.Status)//
+CREATE TRIGGER trg_insp_upd AFTER UPDATE ON Inspection_Master FOR EACH ROW
+  INSERT INTO Inspection_Audit(StageID,Action,NewStatus) VALUES(NEW.StageID,'UPDATE',NEW.Status)//
+
+CREATE PROCEDURE process_inspections()
+BEGIN
+  DECLARE done INT DEFAULT 0; DECLARE s,b INT; DECLARE st VARCHAR(10); DECLARE r VARCHAR(50);
+  DECLARE cur CURSOR FOR SELECT StageID,BatchID,Status,Remarks FROM Inspection_Stage;
+  DECLARE CONTINUE HANDLER FOR NOT FOUND SET done=1;
+  OPEN cur;
+  lp: LOOP
+    FETCH cur INTO s,b,st,r;
+    IF done=1 THEN LEAVE lp; END IF;
+    IF st NOT IN ('PASS','FAIL') THEN INSERT INTO Rejected_Log VALUES(s,'Invalid status');
+    ELSEIF NOT EXISTS(SELECT 1 FROM Production_Batch WHERE BatchID=b) THEN INSERT INTO Rejected_Log VALUES(s,'Unknown batch');
+    ELSEIF EXISTS(SELECT 1 FROM Inspection_Master WHERE StageID=s) THEN INSERT INTO Rejected_Log VALUES(s,'Duplicate');
+    ELSE INSERT INTO Inspection_Master VALUES(s,b,st,r); END IF;
+  END LOOP;
+  CLOSE cur;
+END//
+DELIMITER ;
+
+CALL process_inspections();
+SELECT * FROM Inspection_Master;   -- processed
+SELECT * FROM Rejected_Log;        -- rejected
+UPDATE Inspection_Master SET Status='PASS' WHERE StageID=2;   -- fires update trigger
+SELECT * FROM Inspection_Audit;

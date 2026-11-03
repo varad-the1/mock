@@ -1,0 +1,42 @@
+-- PS10: Vehicle Fleet Maintenance (MySQL) - cursor + triggers
+CREATE DATABASE IF NOT EXISTS fleet; USE fleet;
+CREATE TABLE Vehicle(VehID INT PRIMARY KEY, RegNo VARCHAR(15), LastService DATE);
+CREATE TABLE Maintenance_Stage(StageID INT PRIMARY KEY, VehID INT, ServiceDate DATE, Cost DECIMAL(8,2));
+CREATE TABLE Maintenance_Master(StageID INT PRIMARY KEY, VehID INT, ServiceDate DATE, Cost DECIMAL(8,2));
+CREATE TABLE Maintenance_Audit(AuditID INT AUTO_INCREMENT PRIMARY KEY, StageID INT, Action VARCHAR(10), NewCost DECIMAL(8,2), At TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
+INSERT INTO Vehicle VALUES(1,'MH12AB1234','2026-01-10'),(2,'MH14CD5678','2026-09-20');
+INSERT INTO Maintenance_Stage VALUES(1,1,'2026-02-01',2500),(2,2,'2026-09-25',1800),(3,1,'2026-02-01',-5),(4,7,'2026-03-01',900);
+
+DELIMITER //
+CREATE TRIGGER trg_m_ins AFTER INSERT ON Maintenance_Master FOR EACH ROW
+  INSERT INTO Maintenance_Audit(StageID,Action,NewCost) VALUES(NEW.StageID,'INSERT',NEW.Cost)//
+CREATE TRIGGER trg_m_upd AFTER UPDATE ON Maintenance_Master FOR EACH ROW
+  INSERT INTO Maintenance_Audit(StageID,Action,NewCost) VALUES(NEW.StageID,'UPDATE',NEW.Cost)//
+
+CREATE PROCEDURE process_maintenance()
+BEGIN
+  DECLARE done INT DEFAULT 0; DECLARE s,v INT; DECLARE d DATE; DECLARE c DECIMAL(8,2);
+  DECLARE cur CURSOR FOR SELECT StageID,VehID,ServiceDate,Cost FROM Maintenance_Stage;
+  DECLARE CONTINUE HANDLER FOR NOT FOUND SET done=1;
+  OPEN cur;
+  lp: LOOP
+    FETCH cur INTO s,v,d,c;
+    IF done=1 THEN LEAVE lp; END IF;
+    IF c>=0 AND EXISTS(SELECT 1 FROM Vehicle WHERE VehID=v)
+       AND NOT EXISTS(SELECT 1 FROM Maintenance_Master WHERE StageID=s) THEN
+      INSERT INTO Maintenance_Master VALUES(s,v,d,c);
+      UPDATE Vehicle SET LastService=d WHERE VehID=v AND d>LastService;
+    END IF;
+  END LOOP;
+  CLOSE cur;
+END//
+DELIMITER ;
+
+CALL process_maintenance();
+SELECT * FROM Maintenance_Master;
+UPDATE Maintenance_Master SET Cost=2600 WHERE StageID=1;   -- fires update trigger
+SELECT * FROM Maintenance_Audit;
+-- maintenance history
+SELECT v.RegNo,m.ServiceDate,m.Cost FROM Vehicle v JOIN Maintenance_Master m ON v.VehID=m.VehID ORDER BY v.RegNo,m.ServiceDate;
+-- vehicles needing servicing (last service > 6 months ago)
+SELECT * FROM Vehicle WHERE LastService < DATE_SUB(CURDATE(),INTERVAL 6 MONTH);

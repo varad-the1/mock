@@ -1,0 +1,41 @@
+-- PS5: Vehicle Insurance Premium and No-Claim Bonus (MySQL)
+CREATE DATABASE IF NOT EXISTS insurance; USE insurance;
+CREATE TABLE Customer(CustID INT PRIMARY KEY, Name VARCHAR(50));
+CREATE TABLE Vehicle(VehID INT PRIMARY KEY, CustID INT, Model VARCHAR(30), Value DECIMAL(10,2), FOREIGN KEY(CustID) REFERENCES Customer(CustID));
+CREATE TABLE Insurance_Policy(PolicyID INT PRIMARY KEY, VehID INT, Premium DECIMAL(10,2), FOREIGN KEY(VehID) REFERENCES Vehicle(VehID));
+CREATE TABLE Insurance_Claim(ClaimID INT PRIMARY KEY, PolicyID INT, Amount DECIMAL(10,2), FOREIGN KEY(PolicyID) REFERENCES Insurance_Policy(PolicyID));
+INSERT INTO Customer VALUES(1,'Amit'),(2,'Riya');
+INSERT INTO Vehicle VALUES(1,1,'Swift',500000),(2,2,'City',900000);
+INSERT INTO Insurance_Policy VALUES(1,1,0),(2,2,0);
+INSERT INTO Insurance_Claim VALUES(1,2,15000);
+
+DELIMITER //
+-- function: bonus % = 20 if no claims, else 0
+CREATE FUNCTION no_claim_bonus(p_cust INT) RETURNS DECIMAL(5,2) DETERMINISTIC READS SQL DATA
+BEGIN
+  DECLARE c INT;
+  SELECT COUNT(*) INTO c FROM Insurance_Claim ic JOIN Insurance_Policy p ON ic.PolicyID=p.PolicyID
+    JOIN Vehicle v ON p.VehID=v.VehID WHERE v.CustID=p_cust;
+  RETURN IF(c=0,20,0);
+END//
+
+-- IN policy id, OUT premium
+CREATE PROCEDURE calc_premium(IN p_pol INT, OUT p_prem DECIMAL(10,2))
+BEGIN
+  DECLARE v_val DECIMAL(10,2); DECLARE v_cust INT;
+  SELECT v.Value,v.CustID INTO v_val,v_cust FROM Insurance_Policy p JOIN Vehicle v ON p.VehID=v.VehID WHERE p.PolicyID=p_pol;
+  SET p_prem = v_val*0.03 * (1 - no_claim_bonus(v_cust)/100);
+  UPDATE Insurance_Policy SET Premium=p_prem WHERE PolicyID=p_pol;
+END//
+
+-- INOUT demo: premium passed in, returned after extra discount
+CREATE PROCEDURE apply_discount(INOUT p_prem DECIMAL(10,2), IN p_pct INT)
+BEGIN
+  SET p_prem = p_prem - p_prem*p_pct/100;
+END//
+DELIMITER ;
+
+CALL calc_premium(1,@prem); SELECT @prem AS Premium_Cust1;
+CALL calc_premium(2,@prem2); SELECT @prem2 AS Premium_Cust2;
+CALL apply_discount(@prem,10); SELECT @prem AS After_Discount;
+SELECT no_claim_bonus(1) AS Bonus1, no_claim_bonus(2) AS Bonus2;
